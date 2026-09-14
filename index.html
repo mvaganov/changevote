@@ -1,0 +1,62 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shared Draft — competing edits, tracked and voted</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Collaborative drafting</p>
+    <h1>Shared Draft</h1>
+    <p class="lede">Start a topic, propose alternate versions of it, and watch each proposal render as a line-numbered diff. Any edit can be counted toward — or excluded from — the eventual vote.</p>
+  </header>
+
+  <section class="card">
+    <label class="field-label" for="topicTextArea">Topic text</label>
+    <textarea id="topicTextArea" placeholder="Write the text this topic is about…"></textarea>
+    <div class="topic-status" id="topicStatus"></div>
+
+    <div class="topic-row">
+      <select id="topicSelect" aria-label="Select a topic"></select>
+      <button class="btn-primary" id="startNewBtn">Start new topic</button>
+    </div>
+    <div class="inline-note" id="newTopicNote" style="display:none;"></div>
+  </section>
+
+  <div id="editsSection">
+    <div class="edits-heading">
+      <h2>Edits</h2>
+      <span class="count" id="editsCount"></span>
+    </div>
+
+    <section class="card proposal-card">
+      <label class="field-label" for="proposalTextArea">Propose an edit</label>
+      <textarea id="proposalTextArea"></textarea>
+      <div class="proposal-actions">
+        <button class="btn-primary" id="proposeBtn">Propose edit</button>
+      </div>
+      <div class="inline-note" id="proposalNote" style="display:none;"></div>
+    </section>
+
+    <div id="editsList"></div>
+
+    <div class="vote-footer">
+      <button class="btn-ghost" id="voteBtn">Cast ranked-choice vote</button>
+      <p class="caption" id="voteCaption"></p>
+    </div>
+  </div>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
