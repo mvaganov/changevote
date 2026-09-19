@@ -1,4 +1,4 @@
-﻿(function(){
+(function(){
 
   // ---------------- State ----------------
   let topics = [];          // { id, text, edits: [], nextEditNumber, proposalDraft }
@@ -9,6 +9,7 @@
   function nextId(prefix){ return prefix + '-' + (idCounter++); }
 
   // ---------------- DOM refs ----------------
+  const appLayout = document.getElementById('appLayout');
   const topicTextArea = document.getElementById('topicTextArea');
   const topicStatus = document.getElementById('topicStatus');
   const topicSelect = document.getElementById('topicSelect');
@@ -17,6 +18,8 @@
 
   const editsSection = document.getElementById('editsSection');
   const editsCount = document.getElementById('editsCount');
+  const proposalCard = document.getElementById('proposalCard');
+  const proposalTitleInput = document.getElementById('proposalTitleInput');
   const proposalTextArea = document.getElementById('proposalTextArea');
   const proposeBtn = document.getElementById('proposeBtn');
   const proposalNote = document.getElementById('proposalNote');
@@ -180,9 +183,21 @@
     return firstLine.length > 60 ? firstLine.slice(0, 60) + '…' : firstLine;
   }
 
-  function autoGrow(el){
+  function autoGrow(el, minHeight = 90){
     el.style.height = 'auto';
-    el.style.height = Math.max(el.scrollHeight, 130) + 'px';
+    el.style.height = Math.max(el.scrollHeight, minHeight) + 'px';
+  }
+
+  function updateProposalTextareaSize(isFocused){
+    const isEmpty = proposalTextArea.value.trim() === '';
+    if (!isFocused && isEmpty){
+      proposalTextArea.classList.remove('expanded');
+      proposalTextArea.style.height = '';
+    } else {
+      proposalTextArea.classList.add('expanded');
+      proposalTextArea.style.height = 'auto';
+      proposalTextArea.style.height = Math.max(proposalTextArea.scrollHeight, 110) + 'px';
+    }
   }
 
   // ---------------- Rendering ----------------
@@ -208,12 +223,16 @@
     if (selectedTopicId === 'new'){
       topicTextArea.value = newTopicDraft;
       topicTextArea.readOnly = false;
+      topicTextArea.classList.remove('is-readonly');
       startNewBtn.style.display = '';
       topicStatus.classList.add('editing');
       topicStatus.innerHTML = `<span class="dot"></span> Drafting a new topic — editable`;
+      autoGrow(topicTextArea, 90);
     } else if (topic){
       topicTextArea.value = topic.text;
       topicTextArea.readOnly = true;
+      topicTextArea.classList.add('is-readonly');
+      topicTextArea.style.height = '';
       startNewBtn.style.display = 'none';
       topicStatus.classList.remove('editing');
       topicStatus.innerHTML = `<span class="dot"></span> Locked — select "new topic" to draft another`;
@@ -223,12 +242,17 @@
   function renderEditsSection(){
     const topic = currentTopic();
     if (selectedTopicId === 'new' || !topic){
-      editsSection.classList.remove('visible');
+      if (proposalCard) proposalCard.style.display = 'none';
+      editsSection.style.display = 'none';
+      if (appLayout) appLayout.classList.add('single-column');
       return;
     }
-    editsSection.classList.add('visible');
+    if (proposalCard) proposalCard.style.display = '';
+    editsSection.style.display = '';
+    if (appLayout) appLayout.classList.remove('single-column');
 
     proposalTextArea.value = topic.proposalDraft;
+    updateProposalTextareaSize(document.activeElement === proposalTextArea);
     editsCount.textContent = topic.edits.length === 1 ? '1 proposal' : `${topic.edits.length} proposals`;
 
     if (topic.edits.length === 0){
@@ -237,17 +261,25 @@
       editsList.innerHTML = topic.edits.map(edit => {
         const stats = countChanges(edit.change);
         const diffHtml = edit.change.map(renderDiffRow).join('');
+        const isCollapsed = !!edit.collapsed;
+        const arrow = isCollapsed ? '&#9654;' : '&#9660;';
+        const arrowLabel = isCollapsed ? 'Expand edit diff' : 'Collapse edit diff';
+        const displayTitle = edit.title || `Edit #${edit.number}`;
+
         return `<section class="card edit-card ${edit.voteChecked ? '' : 'excluded'}" draggable="true" data-edit-id="${edit.id}">
           <div class="edit-card-header">
             <span class="drag-handle" title="Drag to reorder">&#10247;</span>
-            <span class="edit-name">Edit #${edit.number}</span>
+            <button type="button" class="collapse-toggle-btn" data-collapse-id="${edit.id}" aria-label="${arrowLabel}" title="${arrowLabel}">
+              <span class="collapse-arrow">${arrow}</span>
+            </button>
+            <span class="edit-name">${esc(displayTitle)}</span>
             <span class="edit-stats"><span class="add-count">+${stats.add}</span> <span class="del-count">−${stats.del}</span></span>
             <label class="vote-toggle">
-              <input type="checkbox" data-vote-edit-id="${edit.id}" ${edit.voteChecked ? 'checked' : ''} aria-label="Count edit ${edit.number} toward vote" />
+              <input type="checkbox" data-vote-edit-id="${edit.id}" ${edit.voteChecked ? 'checked' : ''} aria-label="Count ${esc(displayTitle)} toward vote" />
               <span class="vote-label">${edit.voteChecked ? 'Counts toward vote' : 'Excluded from tally'}</span>
             </label>
           </div>
-          <div class="diff-body">${diffHtml}</div>
+          <div class="diff-body" style="${isCollapsed ? 'display: none;' : ''}">${diffHtml}</div>
         </section>`;
       }).join('');
     }
@@ -271,6 +303,11 @@
     selectedTopicId = id;
     if (id === 'new'){
       newTopicDraft = '';
+    } else {
+      const topic = topics.find(t => t.id === id);
+      if (topic){
+        topic.proposalDraft = topic.text;
+      }
     }
     hideNote(newTopicNote);
     hideNote(proposalNote);
@@ -303,6 +340,10 @@
     if (!topic) return;
     const proposedText = proposalTextArea.value;
 
+    if (!proposedText.trim()){
+      showNote(proposalNote, 'Enter proposed text before proposing.');
+      return;
+    }
     if (proposedText.trim() === topic.text.trim()){
       showNote(proposalNote, 'This matches the current topic text — nothing to propose.');
       return;
@@ -310,15 +351,22 @@
     hideNote(proposalNote);
 
     const change = computeChange(topic.text, proposedText);
+    const editNumber = topic.nextEditNumber++;
+    const userTitle = proposalTitleInput ? proposalTitleInput.value.trim() : '';
+    const title = userTitle || `Edit #${editNumber}`;
+
     const edit = {
       id: nextId('edit'),
-      number: topic.nextEditNumber++,
+      number: editNumber,
+      title: title,
       proposedText: proposedText,
       change: change,
-      voteChecked: true
+      voteChecked: true,
+      collapsed: false
     };
     topic.edits.unshift(edit); // appears directly below the Edit Proposal box
-    topic.proposalDraft = topic.text; // reset the proposal box to the baseline
+    topic.proposalDraft = topic.text; // reset the proposal box to baseline topic text
+    if (proposalTitleInput) proposalTitleInput.value = '';
     render();
   }
 
@@ -403,6 +451,20 @@
         toggleVote(e.target.dataset.voteEditId);
       }
     });
+
+    editsList.addEventListener('click', (e) => {
+      const toggleBtn = e.target.closest('[data-collapse-id]');
+      if (toggleBtn){
+        const editId = toggleBtn.dataset.collapseId;
+        const topic = currentTopic();
+        if (!topic) return;
+        const edit = topic.edits.find(ed => ed.id === editId);
+        if (edit){
+          edit.collapsed = !edit.collapsed;
+          renderEditsSection();
+        }
+      }
+    });
   }
 
   // ---------------- Wire up static controls ----------------
@@ -417,7 +479,15 @@
       newTopicDraft = topicTextArea.value;
       hideNote(newTopicNote);
     }
-    autoGrow(topicTextArea);
+    autoGrow(topicTextArea, 90);
+  });
+
+  proposalTextArea.addEventListener('focus', () => {
+    updateProposalTextareaSize(true);
+  });
+
+  proposalTextArea.addEventListener('blur', () => {
+    updateProposalTextareaSize(false);
   });
 
   proposalTextArea.addEventListener('input', () => {
@@ -426,7 +496,7 @@
       topic.proposalDraft = proposalTextArea.value;
       hideNote(proposalNote);
     }
-    autoGrow(proposalTextArea);
+    updateProposalTextareaSize(true);
   });
 
   attachDragHandlers();
