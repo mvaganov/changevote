@@ -330,9 +330,7 @@
       proposalDraft: text
     };
     topics.push(topic);
-    selectedTopicId = topic.id;
-    hideNote(newTopicNote);
-    render();
+    selectTopic(topic.id);
   }
 
   function proposeEdit(){
